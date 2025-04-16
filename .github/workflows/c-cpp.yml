@@ -32,7 +32,7 @@ jobs:
 
       # 上传生成的 exe 文件构建产物（假设生成文件为 speederv2.exe）
       - name: Upload EXE Artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4.6.2
         with:
           name: speederv2-exe
           path: speederv2.exe
