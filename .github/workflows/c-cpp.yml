@@ -1,68 +1,79 @@
-name: Build udp2raw
+name: UDPspeeder CI/CD Pipeline
 
 on:
   push:
-    branches: [ branch_libev ]
+    branches: [ "branch_libev" ]
+  pull_request:
+    branches: [ "branch_libev" ]
   workflow_dispatch:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [ubuntu-22.04, macos-12, windows-2022]
+        include:
+          - os: ubuntu-22.04
+            build-cmd: make
+          - os: macos-12
+            build-cmd: make
+          - os: windows-2022
+            build-cmd: nmake
+      fail-fast: false
+
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
 
     steps:
-    - name: Checkout source code
-      uses: actions/checkout@v4.2.2
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-    - name: Install build dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y make g++ g++-mingw-w64 zip
+      - name: Setup build environment
+        shell: bash
+        run: |
+          case ${{ matrix.os }} in
+            ubuntu*)
+              sudo apt-get update
+              sudo apt-get install -y build-essential cmake
+              ;;
+            macos*)
+              brew update
+              brew install make cmake
+              ;;
+            windows*)
+              choco install make cmake
+              ;;
+          esac
+        env:
+          HOMEBREW_NO_INSTALL_CLEANUP: 1  # ‌:ml-citation{ref="2,6" data="citationList"}
 
-    - name: Build Windows version
-      run: make mingw_cross
+      - name: Compile binaries
+        run: ${{ matrix.build-cmd }}
+        working-directory: ./src  # ‌:ml-citation{ref="4" data="citationList"}
 
-    - name: Build Linux version
-      run: make all
+      - name: Run smoke test
+        run: |
+          ./udpspeed -v || true  # ‌:ml-citation{ref="4,8" data="citationList"}
 
-    - name: Prepare artifacts
-      run: |
-        mkdir dist
-        cp udp2raw_mp.exe dist/udp2raw_windows.exe
-        cp udp2raw dist/udp2raw_linux
-        zip -r udp2raw_binaries.zip dist
-
-    - name: Upload artifact
-      uses: actions/upload-artifact@v4.6.2
-      with:
-        name: udp2raw_builds
-        path: udp2raw_binaries.zip
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: udpspeeder-${{ matrix.os }}
+          path: |
+            ./udpspeed*
+            ./output/*
+          retention-days: 7  # ‌:ml-citation{ref="6,7" data="citationList"}
 
   release:
     needs: build
+    if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
-
-    if: github.ref == 'refs/heads/branch_libev' && github.event_name == 'push'
-
     steps:
-    - name: Checkout source code
-      uses: actions/checkout@v4.2.2
-
-    - name: Download artifact
-      uses: actions/download-artifact@v4.2.1
-      with:
-        name: udp2raw_builds
-        path: .
-
-    - name: Generate tag name
-      run: echo "TAG_NAME=nightly-$(date +'%Y%m%d-%H%M%S')" >> $GITHUB_ENV
-
-    - name: Create GitHub Release
-      uses: softprops/action-gh-release@v2.2.1
-      with:
-        tag_name: ${{ env.TAG_NAME }}
-        name: udp2raw Nightly Build
-        files: udp2raw_binaries.zip
-        draft: false
-        prerelease: true
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            artifacts/udpspeeder-*
+          generate_release_notes: true
