@@ -1,4 +1,4 @@
-name: UDPspeeder CI/CD Pipeline
+name: Build udp2raw
 
 on:
   push:
