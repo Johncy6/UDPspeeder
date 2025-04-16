@@ -1,79 +1,38 @@
-name: Build udp2raw
+name: Build UDPspeeder (Windows EXE)
 
 on:
   push:
-    branches: [ "branch_libev" ]
+    branches:
+      - branch_libev
   pull_request:
-    branches: [ "branch_libev" ]
-  workflow_dispatch:
+    branches:
+      - branch_libev
 
 jobs:
   build:
-    strategy:
-      matrix:
-        os: [ubuntu-22.04, macos-12, windows-2022]
-        include:
-          - os: ubuntu-22.04
-            build-cmd: make
-          - os: macos-12
-            build-cmd: make
-          - os: windows-2022
-            build-cmd: nmake
-      fail-fast: false
-
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
+    runs-on: ubuntu-latest
 
     steps:
+      # 检出指定分支代码
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          ref: branch_libev
 
-      - name: Setup build environment
-        shell: bash
+      # 安装构建依赖
+      # 其中 mingw-w64 用于交叉编译 Windows 可执行文件
+      - name: Install build dependencies
         run: |
-          case ${{ matrix.os }} in
-            ubuntu*)
-              sudo apt-get update
-              sudo apt-get install -y build-essential cmake
-              ;;
-            macos*)
-              brew update
-              brew install make cmake
-              ;;
-            windows*)
-              choco install make cmake
-              ;;
-          esac
-        env:
-          HOMEBREW_NO_INSTALL_CLEANUP: 1  # ‌:ml-citation{ref="2,6" data="citationList"}
+          sudo apt-get update
+          sudo apt-get install -y build-essential mingw-w64
 
-      - name: Compile binaries
-        run: ${{ matrix.build-cmd }}
-        working-directory: ./src  # ‌:ml-citation{ref="4" data="citationList"}
+      # 调用 makefile 中的 mingw_cross 目标来编译 Windows exe 文件
+      - name: Build Windows executable
+        run: make mingw_cross
 
-      - name: Run smoke test
-        run: |
-          ./udpspeed -v || true  # ‌:ml-citation{ref="4,8" data="citationList"}
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+      # 上传生成的 exe 文件构建产物（假设生成文件为 speederv2.exe）
+      - name: Upload EXE Artifact
+        uses: actions/upload-artifact@v3
         with:
-          name: udpspeeder-${{ matrix.os }}
-          path: |
-            ./udpspeed*
-            ./output/*
-          retention-days: 7  # ‌:ml-citation{ref="6,7" data="citationList"}
-
-  release:
-    needs: build
-    if: github.ref == 'refs/heads/master'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
-        with:
-          files: |
-            artifacts/udpspeeder-*
-          generate_release_notes: true
+          name: speederv2-exe
+          path: speederv2.exe
