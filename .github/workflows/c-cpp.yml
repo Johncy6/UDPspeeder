@@ -1,0 +1,64 @@
+name: C/C++ CI
+
+on:
+  push:
+    branches: [ "branch_libev" ]
+  pull_request:
+    branches: [ "branch_libev" ]
+
+jobs:
+
+   build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout source code
+      uses: actions/checkout@v3
+
+    - name: Install build dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y make g++ g++-mingw-w64 zip
+
+    - name: Build Windows version
+      run: make mingw_cross
+
+    - name: Build Linux version
+      run: make all
+
+    - name: Prepare artifacts
+      run: |
+        mkdir dist
+        cp udp2raw_mp.exe dist/udp2raw_windows.exe
+        cp udp2raw dist/udp2raw_linux
+        zip -r udp2raw_binaries.zip dist
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: udp2raw_builds
+        path: udp2raw_binaries.zip
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+
+    steps:
+    - name: Download artifact
+      uses: actions/download-artifact@v3
+      with:
+        name: udp2raw_builds
+        path: .
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: nightly-$(date +'%Y%m%d-%H%M%S')
+        name: udp2raw Nightly Build
+        files: udp2raw_binaries.zip
+        draft: false
+        prerelease: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
