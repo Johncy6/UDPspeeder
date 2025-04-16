@@ -1,34 +1,68 @@
-name: Build Windows Binary
+name: Build udp2raw
 
 on:
   push:
     branches: [ branch_libev ]
-  pull_request:
-    branches: [ branch_libev ]
+  workflow_dispatch:
 
 jobs:
-  build-windows:
+  build:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout source
-      uses: actions/checkout@v2
+    - name: Checkout source code
+      uses: actions/checkout@v3
 
-    - name: Install dependencies
+    - name: Install build dependencies
       run: |
-        sudo apt update
-        sudo apt install -y g++ make mingw-w64 zip
+        sudo apt-get update
+        sudo apt-get install -y make g++ g++-mingw-w64 zip
 
-    - name: Build with MinGW
-      run: |
-        make mingw_cross
+    - name: Build Windows version
+      run: make mingw_cross
 
-    - name: Archive output
+    - name: Build Linux version
+      run: make all
+
+    - name: Prepare artifacts
       run: |
-        zip -j udp2raw_windows_build.zip udp2raw_mp.exe
+        mkdir dist
+        cp udp2raw_mp.exe dist/udp2raw_windows.exe
+        cp udp2raw dist/udp2raw_linux
+        zip -r udp2raw_binaries.zip dist
 
     - name: Upload artifact
       uses: actions/upload-artifact@v3
       with:
-        name: udp2raw_windows_build
-        path: udp2raw_windows_build.zip
+        name: udp2raw_builds
+        path: udp2raw_binaries.zip
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+
+    if: github.ref == 'refs/heads/branch_libev' && github.event_name == 'push'
+
+    steps:
+    - name: Checkout source code
+      uses: actions/checkout@v3
+
+    - name: Download artifact
+      uses: actions/download-artifact@v3
+      with:
+        name: udp2raw_builds
+        path: .
+
+    - name: Generate tag name
+      run: echo "TAG_NAME=nightly-$(date +'%Y%m%d-%H%M%S')" >> $GITHUB_ENV
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: ${{ env.TAG_NAME }}
+        name: udp2raw Nightly Build
+        files: udp2raw_binaries.zip
+        draft: false
+        prerelease: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
